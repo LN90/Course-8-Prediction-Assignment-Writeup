@@ -1,0 +1,107 @@
+---
+title: "Machine Learning Assignment"
+author: "H.L. Oosting"
+date: "12 januari 2017"
+output: html_document
+---
+
+### Introduction
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. In this report a model is found to predict the classe of the excersize.
+
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Plan of Action
+According to the first week there are different staps in a prediction study:
+1. define error rate
+2. split data into testing and training
+3. on the training set pick features with help of cross validation
+4. on the training set pick prediction function with help of cross validation
+5. apply once on the test set
+
+#### Define error rate & Split data into testing and training
+The first step, error rate can be determined when the model is finished and applied to the test set within the train set. What now is know that the "classe" has to determined. Classe has 5 options: A,B,C,D and E. The second stap is already done, there are two differents datasets for training and testing. The third step, picking features with the help of cross vallidation will now be done. The approach for this:
+1. The training set will be split in a training and test set
+2. Build a model on the training set
+4. Evaluate on the test set
+5. Repeat and average the estimated errors.
+
+Before the set is split up the seed is set to make this research reproducible.
+```{r}
+setwd("~/DSP/course 8/assignment")
+list.files()
+testing<-read.csv("pml-testing.csv")
+training<-read.csv("pml-training.csv")
+#head(training) for some exploratory data analysis
+#str(training) for some exploratory data analysis
+
+set.seed(12345)
+library(caret)
+inTrain<-createDataPartition(training$classe,p=0.6,list=FALSE)
+train<-training[inTrain,]
+test<-training[-inTrain,]
+```
+
+#### Build a model on the training set
+Due to the huge amount of possible predictors, 160, there will be no plots of possible predictors. Some more exploratory data analysis is needed to decide what to do next. This is done with the summary(train), which not will be shown, due to the length. It is noticed that there are factor variables, empty colums (DIV/0), columns with NA values. So the first choice is to clean up the data by removing these non-informative columns. From here on a function will be build where a dataframe can be put in, so that all the changes we do, will also be done on the test dataframe.
+
+```{r}
+train[train==""] <- NA
+NArate <- apply(train, 2, function(x) sum(is.na(x)))/nrow(train)
+# 2 stands for the columns
+# NArate is the percentage of the NA rate, which you want under the 0.8
+cleandata <- train[NArate==0]
+```
+
+There are still columns with factors in the dataframe, this is determined with the commando of str(cleandata), so these columns are subsetted and later added together.
+
+```{r}
+dat_num<-cleandata[,sapply(cleandata,is.numeric)]
+dat_factor<-cleandata[,sapply(cleandata,is.factor)]
+summary(dat_factor)
+```
+
+From the factor part we can see that all those columns don't tell that much. The name, date dont predict the classe and the new_window variable is mostly no. So we will leave those out. Also the X column is left out, this is just numbering of the rows.
+```{r}
+dat_factor<-data.frame(classe=dat_factor$classe)
+data_for_model<-cbind(dat_factor,dat_num)
+data_for_model<-data_for_model[,-2]
+```
+
+Now are dataset is ready and models can be trained. The next models are considered:
+desicion tree (rpart)
+random forest (rf)
+boosting (gbm)
+linear discriminant analysis (lda)
+
+The desicion tree:
+```{r}
+model_rpart<-train(classe~.,data=data_for_model,method="rpart")
+confusionMatrix(predict(model_rpart,test),test$classe)
+```
+The desiscion tree gives an Accuracy of  0.5495.
+
+The random forest, I had to make the training set smaller, else my pc could not take it.
+```{r}
+library(randomForest)
+set.seed(123)
+data_rf_train<-data_for_model[createDataPartition(data_for_model$classe,p=0.5,list=FALSE),]
+data_rf_test<-data_for_model[-(createDataPartition(data_for_model$classe,p=0.5,list=FALSE)),]
+model_rf<-randomForest(classe~., data_rf_train, prox=TRUE)
+confusionMatrix(predict(model_rf,data_rf_test),data_rf_test$classe)
+```
+The random forest gives an accuracy of:  0.9963
+Since this is so high and the boosting models take more then half an hour to progress I leave it to this.
+
+### Evaluate on the test set
+Now to determine the Accuracy:
+
+```{r}
+confusionMatrix(predict(model_rf,test),test$classe)
+```
+### Predict the testing set
+Now the model is used on the testing set.
+
+```{r}
+predict(model_rf,testing)
+```
